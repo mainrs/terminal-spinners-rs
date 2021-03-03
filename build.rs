@@ -58,6 +58,7 @@ fn main() -> Result<()> {
     if !output.status.success() {
         io::stdout().write_all(&output.stdout)?;
         io::stderr().write_all(&output.stderr)?;
+        panic!("Failed to invoke rustfmt");
     }
 
     // Only re-run if the actual spinner data has changed.
