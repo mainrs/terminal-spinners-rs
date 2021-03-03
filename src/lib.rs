@@ -6,6 +6,7 @@ pub use spinners::*;
 /// Each spinner consists of a number of frames and an interval. The interval is
 /// used for animation and should be the amount of milliseconds between each
 /// frame.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SpinnerData<'a> {
     pub frames: &'a [&'a str],
     pub interval: usize,
