@@ -13,7 +13,7 @@ use std::{
 #[derive(Debug, Deserialize)]
 struct JsonSpinnerData {
     pub frames: Vec<String>,
-    pub interval: usize,
+    pub interval: u64,
 }
 
 // Deserialization type.
