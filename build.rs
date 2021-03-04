@@ -1,11 +1,12 @@
 use anyhow::Result;
-use heck::ShoutySnakeCase;
+use heck::{ShoutySnakeCase, SnakeCase};
 use quote::{format_ident, quote};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
     fs,
     io::{self, Write},
+    path::Path,
     process::Command,
 };
 
@@ -30,10 +31,10 @@ fn main() -> Result<()> {
 
     // Build the constants that hold each spinner data.
     let spinner_const_items = spinners
-        .into_iter()
+        .iter()
         .map(|(name, data)| {
             let name = format_ident!("{}", spinner_name_to_const_name(name));
-            let frames = data.frames;
+            let frames = &data.frames;
             let interval = data.interval;
 
             quote! {
@@ -52,9 +53,37 @@ fn main() -> Result<()> {
     };
 
     fs::write("./src/spinners.rs", module_to_write.to_string())?;
+
+    // Generate examples for each spinner.
+    let examples = spinners
+        .iter()
+        .map(|(name, _)| {
+            let spinner_name = format_ident!("{}", spinner_name_to_const_name(name));
+
+            let code = quote! {
+                use std::{thread, time::Duration};
+                use terminal_spinners::{SpinnerBuilder, #spinner_name};
+
+                fn main() {
+                    let text = "Loading unicorns";
+                    let handle = SpinnerBuilder::new().spinner(&#spinner_name).text(text).start();
+                    thread::sleep(Duration::from_secs(3));
+                    handle.done();
+                }
+
+            };
+            (name, code)
+        })
+        .collect::<Vec<_>>();
+
+    for (name, code) in examples {
+        let filename = format!("{}.rs", name.to_snake_case());
+        fs::write(Path::new("./examples").join(filename), code.to_string())?;
+    }
+
     // Format the generated source code. rustfmt is a hard-dependency and the script
     // fails otherwise.
-    let output = Command::new("rustfmt").arg("./src/spinners.rs").output()?;
+    let output = Command::new("cargo").arg("fmt").output()?;
     if !output.status.success() {
         io::stdout().write_all(&output.stdout)?;
         io::stderr().write_all(&output.stderr)?;
