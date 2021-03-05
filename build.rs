@@ -52,7 +52,9 @@ fn main() -> Result<()> {
         #(#spinner_const_items)*
     };
 
-    fs::write("./src/spinners.rs", module_to_write.to_string())?;
+    let out_dir = std::env::var_os("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join("spinners.rs");
+    fs::write(&dest_path, module_to_write.to_string())?;
 
     // Generate examples for each spinner.
     let examples = spinners
@@ -91,6 +93,7 @@ fn main() -> Result<()> {
     }
 
     // Only re-run if the actual spinner data has changed.
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=spinners.json");
     Ok(())
 }

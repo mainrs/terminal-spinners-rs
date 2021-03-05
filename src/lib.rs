@@ -3,8 +3,7 @@ mod print;
 #[cfg(feature = "print")]
 pub use print::{SpinnerBuilder, SpinnerHandle};
 
-mod spinners;
-pub use spinners::*;
+include!(concat!(env!("OUT_DIR"), "/spinners.rs"));
 
 /// Data related to a spinner.
 ///
