@@ -8,6 +8,8 @@
 
 ## Usage
 
+> **NOTE:** Printing is only supported with the `print` feature, which is enabled by default.
+
 ```rust
 use terminal_spinners::{SpinnerBuilder, DOTS};
 
