@@ -13,6 +13,7 @@ const INFO_EMOJI: Emoji = Emoji::new("ℹ", "i");
 const SUCCESS_EMOJI: Emoji = Emoji::new("✔", "√");
 const WARNING_EMOJI: Emoji = Emoji::new("⚠", "‼");
 
+// Commands send through the mpsc channels to notify the render thread of certain events.
 enum SpinnerCommand {
     Done,
     Error,
@@ -21,12 +22,16 @@ enum SpinnerCommand {
     Warn,
 }
 
+// The internal representation of a spinner.
+//
+// Holds all the data needed to actually render the spinner on a render thread.
 struct Spinner {
     data: &'static SpinnerData<'static>,
     text: &'static str,
     rx: Receiver<SpinnerCommand>,
 }
 
+/// A builder for creating a terminal spinner.
 #[derive(Clone, Default)]
 pub struct SpinnerBuilder {
     spinner_data: Option<&'static SpinnerData<'static>>,
@@ -34,20 +39,32 @@ pub struct SpinnerBuilder {
 }
 
 impl<'a> SpinnerBuilder {
+    /// Creates a new builder.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// The spinner animation to use.
     pub fn spinner(&'a mut self, spinner: &'static SpinnerData<'static>) -> &'a mut Self {
         self.spinner_data = Some(spinner);
         self
     }
 
+    /// The text to show after the spinner animation.
     pub fn text(&'a mut self, text: &'static str) -> &'a mut Self {
         self.text = Some(text);
         self
     }
 
+    /// Starts the spinner and renders it on a separate thread.
+    ///
+    /// # Returns
+    ///
+    /// A `SpinnerHandle`, allowing for further control of the spinner after it gets rendered.
+    ///
+    /// # Panics
+    ///
+    /// If no text and spinner have been set.
     pub fn start(&self) -> SpinnerHandle {
         assert!(self.spinner_data.is_some());
         assert!(self.text.is_some());
@@ -63,15 +80,13 @@ impl<'a> SpinnerBuilder {
 }
 
 impl Spinner {
-    pub fn start(self, tx: Sender<SpinnerCommand>) -> SpinnerHandle {
+    fn start(self, tx: Sender<SpinnerCommand>) -> SpinnerHandle {
         let handle = thread::spawn(move || {
-            // Create the terminal instance used for rendering.
             let mut stdout = stdout();
 
-            let mut is_done = false;
-            let mut is_error = false;
-            let mut is_info = false;
-            let mut is_warn = false;
+            // Use a number and the lower four bits to see what command has been send. Makes the if statements easier.
+            // From low to high: done, error, info, warning.
+            let mut cmd_flags = 0u8;
 
             // Cycle through the frames
             for &frame in self.data.frames.iter().cycle() {
@@ -81,16 +96,16 @@ impl Spinner {
                     match self.rx.try_recv() {
                         Ok(cmd) => match cmd {
                             SpinnerCommand::Done => {
-                                is_done = true;
+                                cmd_flags |= 0b1;
                             }
                             SpinnerCommand::Error => {
-                                is_error = true;
+                                cmd_flags |= 0b10;
                             }
                             SpinnerCommand::Info => {
-                                is_info = true;
+                                cmd_flags |= 0b100;
                             }
                             SpinnerCommand::Warn => {
-                                is_warn = true;
+                                cmd_flags |= 0b1000;
                             }
                             SpinnerCommand::Stop => {
                                 should_stop_cycle_loop = true;
@@ -107,32 +122,18 @@ impl Spinner {
                 queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
                 queue!(stdout, cursor::MoveToColumn(0)).unwrap();
 
-                if is_warn {
-                    write!(
-                        stdout,
-                        "{} {}",
-                        WARNING_EMOJI.to_string().yellow(),
-                        self.text
-                    )
-                    .unwrap();
-                    should_stop_cycle_loop = true;
-                } else if is_error {
-                    write!(stdout, "{} {}", ERROR_EMOJI.to_string().red(), self.text).unwrap();
-                    should_stop_cycle_loop = true;
-                } else if is_done {
-                    write!(
-                        stdout,
-                        "{} {}",
-                        SUCCESS_EMOJI.to_string().green(),
-                        self.text
-                    )
-                    .unwrap();
-                    should_stop_cycle_loop = true;
-                } else if is_info {
-                    write!(stdout, "{} {}", INFO_EMOJI.to_string().blue(), self.text).unwrap();
+                // Check if we need to print an emoji or the current frame.
+                if cmd_flags != 0 {
+                    let emoji_to_write = match cmd_flags {
+                        0b0001 => SUCCESS_EMOJI.to_string().green(),
+                        0b0010 => ERROR_EMOJI.to_string().red(),
+                        0b0100 => INFO_EMOJI.to_string().blue(),
+                        0b1000 => WARNING_EMOJI.to_string().yellow(),
+                        _ => unreachable!(),
+                    };
+                    write!(stdout, "{} {}", emoji_to_write, self.text).unwrap();
                     should_stop_cycle_loop = true;
                 } else {
-                    // Write frame to output, followed by the message
                     write!(stdout, "{}{}", frame, self.text).unwrap();
                 }
 
@@ -151,32 +152,40 @@ impl Spinner {
     }
 }
 
+/// A handle to a running spinner.
+///
+/// Can be used to send commands to the render thread.
 pub struct SpinnerHandle {
     handle: JoinHandle<()>,
     tx: Sender<SpinnerCommand>,
 }
 
 impl SpinnerHandle {
+    /// Stops the spinner and renders a success symbol.
     pub fn done(self) {
         self.tx.send(SpinnerCommand::Done).unwrap();
         self.stop();
     }
 
+    /// Stops the spinner and renders an error symbol.
     pub fn error(self) {
         self.tx.send(SpinnerCommand::Error).unwrap();
         self.stop();
     }
 
+    /// Stops the spinner and renders an information symbol.
     pub fn info(self) {
         self.tx.send(SpinnerCommand::Info).unwrap();
         self.stop();
     }
 
+    /// Stops the spinner.
     pub fn stop(self) {
         self.tx.send(SpinnerCommand::Stop).unwrap();
         self.handle.join().unwrap();
     }
 
+    /// Stops the spinner and renders a warning symbol.
     pub fn warn(self) {
         self.tx.send(SpinnerCommand::Warn).unwrap();
         self.stop();
