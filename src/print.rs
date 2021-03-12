@@ -1,17 +1,12 @@
 use crate::SpinnerData;
-use crossterm::{cursor, queue, style::Colorize, terminal};
+use crossterm::{cursor, queue, terminal};
 use std::{
     io::{stdout, Write},
     sync::mpsc::{channel, Receiver, Sender, TryRecvError},
     thread::{self, JoinHandle},
     time::Duration,
 };
-use terminal_emoji::Emoji;
-
-const ERROR_EMOJI: Emoji = Emoji::new("✖", "×");
-const INFO_EMOJI: Emoji = Emoji::new("ℹ", "i");
-const SUCCESS_EMOJI: Emoji = Emoji::new("✔", "√");
-const WARNING_EMOJI: Emoji = Emoji::new("⚠", "‼");
+use terminal_log_symbols::colored::{ERROR_SYMBOL, INFO_SYMBOL, SUCCESS_SYMBOL, WARNING_SYMBOL};
 
 // Commands send through the mpsc channels to notify the render thread of certain events.
 enum SpinnerCommand {
@@ -125,10 +120,10 @@ impl Spinner {
                 // Check if we need to print an emoji or the current frame.
                 if cmd_flags != 0 {
                     let emoji_to_write = match cmd_flags {
-                        0b0001 => SUCCESS_EMOJI.to_string().green(),
-                        0b0010 => ERROR_EMOJI.to_string().red(),
-                        0b0100 => INFO_EMOJI.to_string().blue(),
-                        0b1000 => WARNING_EMOJI.to_string().yellow(),
+                        0b0001 => SUCCESS_SYMBOL,
+                        0b0010 => ERROR_SYMBOL,
+                        0b0100 => INFO_SYMBOL,
+                        0b1000 => WARNING_SYMBOL,
                         _ => unreachable!(),
                     };
                     write!(stdout, "{} {}", emoji_to_write, self.text).unwrap();
