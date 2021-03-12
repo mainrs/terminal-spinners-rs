@@ -1,5 +1,5 @@
 use crate::SpinnerData;
-use crossterm::{cursor, queue, terminal};
+use crossterm::{cursor, execute, queue, terminal};
 use std::borrow::Cow;
 use std::{
     io::{stdout, Write},
@@ -16,6 +16,7 @@ enum SpinnerCommand {
     Error,
     Info,
     Stop,
+    StopAndClear,
     Warn,
 }
 
@@ -87,6 +88,7 @@ impl Spinner {
 
             // Cycle through the frames
             for &frame in self.data.frames.iter().cycle() {
+                let mut should_clear_line = false;
                 let mut should_stop_cycle_loop = false;
 
                 loop {
@@ -108,6 +110,10 @@ impl Spinner {
                                 cmd_flags |= 0b1000;
                             }
                             SpinnerCommand::Stop => {
+                                should_stop_cycle_loop = true;
+                            }
+                            SpinnerCommand::StopAndClear => {
+                                should_clear_line = true;
                                 should_stop_cycle_loop = true;
                             }
                         },
@@ -141,6 +147,10 @@ impl Spinner {
                 stdout.flush().unwrap();
 
                 if should_stop_cycle_loop {
+                    if should_clear_line {
+                        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))
+                            .unwrap();
+                    }
                     break;
                 }
 
@@ -182,6 +192,12 @@ impl SpinnerHandle {
     /// Stops the spinner.
     pub fn stop(self) {
         self.tx.send(SpinnerCommand::Stop).unwrap();
+        self.handle.join().unwrap();
+    }
+
+    /// Stops the spinner and clears the line it was printed on.
+    pub fn stop_and_clear(self) {
+        self.tx.send(SpinnerCommand::StopAndClear).unwrap();
         self.handle.join().unwrap();
     }
 

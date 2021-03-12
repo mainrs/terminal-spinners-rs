@@ -19,7 +19,11 @@ std::thread::sleep(std::time::Duration::from_secs(3));
 handle.done();
 ```
 
-The `examples/` directory contains an example for each available spinner. To see them in action, run `cargo run --example <name>`.
+The `examples/` directory contains an example for each available spinner. To see them in action, run `cargo run --example <name>`. Additional examples for showcasing other functionality are:
+
+| Filename     | Desc                                      |
+| ------------ | ----------------------------------------- |
+| `clear_line` | Showcases `SpinnerHandle::stop_and_clear` |
 
 ## Shortcomings
 
