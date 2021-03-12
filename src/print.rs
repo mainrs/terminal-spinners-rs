@@ -1,5 +1,6 @@
 use crate::SpinnerData;
 use crossterm::{cursor, queue, terminal};
+use std::borrow::Cow;
 use std::{
     io::{stdout, Write},
     sync::mpsc::{channel, Receiver, Sender, TryRecvError},
@@ -10,6 +11,7 @@ use terminal_log_symbols::colored::{ERROR_SYMBOL, INFO_SYMBOL, SUCCESS_SYMBOL, W
 
 // Commands send through the mpsc channels to notify the render thread of certain events.
 enum SpinnerCommand {
+    ChangeText(String),
     Done,
     Error,
     Info,
@@ -22,7 +24,7 @@ enum SpinnerCommand {
 // Holds all the data needed to actually render the spinner on a render thread.
 struct Spinner {
     data: &'static SpinnerData<'static>,
-    text: &'static str,
+    text: Cow<'static, str>,
     rx: Receiver<SpinnerCommand>,
 }
 
@@ -67,7 +69,7 @@ impl<'a> SpinnerBuilder {
         let (tx, rx) = channel();
         let spinner = Spinner {
             data: self.spinner_data.unwrap(),
-            text: self.text.unwrap(),
+            text: self.text.unwrap().into(),
             rx,
         };
         spinner.start(tx)
@@ -75,7 +77,7 @@ impl<'a> SpinnerBuilder {
 }
 
 impl Spinner {
-    fn start(self, tx: Sender<SpinnerCommand>) -> SpinnerHandle {
+    fn start(mut self, tx: Sender<SpinnerCommand>) -> SpinnerHandle {
         let handle = thread::spawn(move || {
             let mut stdout = stdout();
 
@@ -90,6 +92,9 @@ impl Spinner {
                 loop {
                     match self.rx.try_recv() {
                         Ok(cmd) => match cmd {
+                            SpinnerCommand::ChangeText(text) => {
+                                self.text = text.into();
+                            }
                             SpinnerCommand::Done => {
                                 cmd_flags |= 0b1;
                             }
@@ -178,6 +183,13 @@ impl SpinnerHandle {
     pub fn stop(self) {
         self.tx.send(SpinnerCommand::Stop).unwrap();
         self.handle.join().unwrap();
+    }
+
+    /// Changes the text of the spinner.
+    pub fn text(&self, text: impl ToString) {
+        self.tx
+            .send(SpinnerCommand::ChangeText(text.to_string()))
+            .unwrap();
     }
 
     /// Stops the spinner and renders a warning symbol.
