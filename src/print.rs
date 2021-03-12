@@ -131,7 +131,7 @@ impl Spinner {
                         0b1000 => WARNING_SYMBOL,
                         _ => unreachable!(),
                     };
-                    write!(stdout, "{} {}", emoji_to_write, self.text).unwrap();
+                    writeln!(stdout, "{} {}", emoji_to_write, self.text).unwrap();
                     should_stop_cycle_loop = true;
                 } else {
                     write!(stdout, "{}{}", frame, self.text).unwrap();
