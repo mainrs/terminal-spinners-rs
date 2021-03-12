@@ -148,8 +148,9 @@ impl Spinner {
 
                 if should_stop_cycle_loop {
                     if should_clear_line {
-                        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))
-                            .unwrap();
+                        queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+                        queue!(stdout, cursor::MoveToColumn(0)).unwrap();
+                        stdout.flush().unwrap();
                     }
                     break;
                 }
