@@ -6,7 +6,9 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-use terminal_log_symbols::colored::{ERROR_SYMBOL, INFO_SYMBOL, SUCCESS_SYMBOL, WARNING_SYMBOL};
+use terminal_log_symbols::colored::{
+    ERROR_SYMBOL, INFO_SYMBOL, SUCCESS_SYMBOL, UNKNOWN_SYMBOL, WARNING_SYMBOL,
+};
 pub use terminal_spinner_data::*;
 
 // Commands send through the mpsc channels to notify the render thread of certain events.
@@ -18,6 +20,7 @@ enum SpinnerCommand {
     Stop,
     StopAndClear,
     Warn,
+    Unknown,
 }
 
 // The internal representation of a spinner.
@@ -83,7 +86,7 @@ impl Spinner {
             let mut stdout = stdout();
 
             // Use a number and the lower four bits to see what command has been send. Makes the if statements easier.
-            // From low to high: done, error, info, warning.
+            // From low to high: done, error, info, warning, unknown.
             let mut cmd_flags = 0u8;
 
             // Cycle through the frames
@@ -108,6 +111,9 @@ impl Spinner {
                             }
                             SpinnerCommand::Warn => {
                                 cmd_flags |= 0b1000;
+                            }
+                            SpinnerCommand::Unknown => {
+                                cmd_flags |= 0b10000;
                             }
                             SpinnerCommand::Stop => {
                                 should_stop_cycle_loop = true;
@@ -135,6 +141,7 @@ impl Spinner {
                         0b0010 => ERROR_SYMBOL,
                         0b0100 => INFO_SYMBOL,
                         0b1000 => WARNING_SYMBOL,
+                        0b10000 => UNKNOWN_SYMBOL,
                         _ => unreachable!(),
                     };
                     writeln!(stdout, "{} {}", emoji_to_write, self.text).unwrap();
@@ -213,5 +220,11 @@ impl SpinnerHandle {
     pub fn warn(self) {
         self.tx.send(SpinnerCommand::Warn).unwrap();
         self.stop();
+    }
+
+    /// Stops the spinner and renders an unknown symbol.
+    pub fn unknown(self) {
+        self.tx.send(SpinnerCommand::Unknown).unwrap();
+        self.stop()
     }
 }
