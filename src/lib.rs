@@ -11,7 +11,7 @@ pub use terminal_spinner_data::*;
 
 // Commands send through the mpsc channels to notify the render thread of certain events.
 enum SpinnerCommand {
-    ChangeText(String),
+    ChangeText(Cow<'static, str>),
     Done,
     Error,
     Info,
@@ -33,7 +33,7 @@ struct Spinner {
 #[derive(Clone, Default)]
 pub struct SpinnerBuilder {
     spinner_data: Option<&'static SpinnerData<'static>>,
-    text: Option<&'static str>,
+    text: Option<Cow<'static, str>>,
 }
 
 impl<'a> SpinnerBuilder {
@@ -43,14 +43,14 @@ impl<'a> SpinnerBuilder {
     }
 
     /// The spinner animation to use.
-    pub fn spinner(&'a mut self, spinner: &'static SpinnerData<'static>) -> &'a mut Self {
+    pub fn spinner(mut self, spinner: &'static SpinnerData<'static>) -> Self {
         self.spinner_data = Some(spinner);
         self
     }
 
     /// The text to show after the spinner animation.
-    pub fn text(&'a mut self, text: &'static str) -> &'a mut Self {
-        self.text = Some(text);
+    pub fn text(mut self, text: impl Into<Cow<'static, str>>) -> Self {
+        self.text = Some(text.into());
         self
     }
 
@@ -63,14 +63,14 @@ impl<'a> SpinnerBuilder {
     /// # Panics
     ///
     /// If no text and spinner have been set.
-    pub fn start(&self) -> SpinnerHandle {
+    pub fn start(self) -> SpinnerHandle {
         assert!(self.spinner_data.is_some());
         assert!(self.text.is_some());
 
         let (tx, rx) = channel();
         let spinner = Spinner {
             data: self.spinner_data.unwrap(),
-            text: self.text.unwrap().into(),
+            text: self.text.unwrap(),
             rx,
         };
         spinner.start(tx)
@@ -95,7 +95,7 @@ impl Spinner {
                     match self.rx.try_recv() {
                         Ok(cmd) => match cmd {
                             SpinnerCommand::ChangeText(text) => {
-                                self.text = text.into();
+                                self.text = text;
                             }
                             SpinnerCommand::Done => {
                                 cmd_flags |= 0b1;
@@ -203,9 +203,9 @@ impl SpinnerHandle {
     }
 
     /// Changes the text of the spinner.
-    pub fn text(&self, text: impl ToString) {
+    pub fn text(&self, text: impl Into<Cow<'static, str>>) {
         self.tx
-            .send(SpinnerCommand::ChangeText(text.to_string()))
+            .send(SpinnerCommand::ChangeText(text.into()))
             .unwrap();
     }
 
