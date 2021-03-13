@@ -1,5 +1,5 @@
 use crate::SpinnerData;
-use crossterm::{cursor, execute, queue, terminal};
+use crossterm::{cursor, queue, terminal};
 use std::borrow::Cow;
 use std::{
     io::{stdout, Write},
