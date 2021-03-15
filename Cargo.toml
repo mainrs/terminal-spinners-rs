@@ -10,4 +10,4 @@ edition = "2018"
 [dependencies]
 crossterm = "0.19.0"
 terminal-log-symbols = "0.1.5"
-terminal-spinner-data = "0.1.0"
+terminal-spinner-data = "0.1.1"
