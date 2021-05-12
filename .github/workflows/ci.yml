@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.7
         with:
           profile: minimal
           toolchain: nightly
@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.7
         with:
           profile: minimal
           toolchain: ${{ matrix.rust }}
@@ -71,7 +71,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.7
         with:
           profile: minimal
           toolchain: ${{ matrix.rust }}
