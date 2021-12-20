@@ -1,5 +1,6 @@
 use crossterm::{cursor, queue, terminal};
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::{
     io::{stdout, Write},
     sync::mpsc::{channel, Receiver, Sender, TryRecvError},
@@ -13,16 +14,35 @@ pub use terminal_spinner_data::*;
 
 type Str = Cow<'static, str>;
 
-// Commands send through the mpsc channels to notify the render thread of certain events.
-enum SpinnerCommand {
-    ChangeText(Cow<'static, str>),
+#[derive(Copy, Clone)]
+enum StopType {
     Done,
     Error,
     Info,
-    Stop,
-    StopAndClear,
     Warn,
     Unknown,
+}
+
+impl Display for StopType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Done => write!(f, "{}", SUCCESS_SYMBOL),
+            Self::Error => write!(f, "{}", ERROR_SYMBOL),
+            Self::Info => write!(f, "{}", INFO_SYMBOL),
+            Self::Warn => write!(f, "{}", WARNING_SYMBOL),
+            Self::Unknown => write!(f, "{}", UNKNOWN_SYMBOL),
+        }
+    }
+}
+
+// Commands send through the mpsc channels to notify the render thread of certain events.
+enum SpinnerCommand {
+    /// Changes the text of the spinner. The change is visible once the spinner gets redrawn.
+    ChangeText(Cow<'static, str>),
+
+    // Commands that stop the spinner.
+    Stop(Option<StopType>),
+    StopAndClear,
 }
 
 // The internal representation of a spinner.
@@ -99,88 +119,55 @@ impl Spinner {
     fn start(mut self, tx: Sender<SpinnerCommand>) -> SpinnerHandle {
         let handle = thread::spawn(move || {
             let mut stdout = stdout();
-
-            // Use a number and the lower four bits to see what command has been send. Makes the if statements easier.
-            // From low to high: done, error, info, warning, unknown.
-            let mut cmd_flags = 0u8;
+            let mut symbol: Option<StopType> = None;
 
             // Cycle through the frames
             for &frame in self.data.frames.iter().cycle() {
                 let mut should_clear_line = false;
                 let mut should_stop_cycle_loop = false;
 
-                loop {
-                    match self.rx.try_recv() {
-                        Ok(cmd) => match cmd {
-                            SpinnerCommand::ChangeText(text) => {
-                                self.text = text;
-                            }
-                            SpinnerCommand::Done => {
-                                cmd_flags |= 0b1;
-                            }
-                            SpinnerCommand::Error => {
-                                cmd_flags |= 0b10;
-                            }
-                            SpinnerCommand::Info => {
-                                cmd_flags |= 0b100;
-                            }
-                            SpinnerCommand::Warn => {
-                                cmd_flags |= 0b1000;
-                            }
-                            SpinnerCommand::Unknown => {
-                                cmd_flags |= 0b10000;
-                            }
-                            SpinnerCommand::Stop => {
-                                should_stop_cycle_loop = true;
-                            }
-                            SpinnerCommand::StopAndClear => {
-                                should_clear_line = true;
-                                should_stop_cycle_loop = true;
-                            }
-                        },
-                        Err(TryRecvError::Empty) => break,
-                        Err(TryRecvError::Disconnected) => {
+                match self.rx.try_recv() {
+                    Ok(cmd) => match cmd {
+                        SpinnerCommand::ChangeText(text) => self.text = text,
+                        SpinnerCommand::Stop(s) => {
+                            should_stop_cycle_loop = true;
+                            symbol = s;
+                        }
+                        SpinnerCommand::StopAndClear => {
+                            should_clear_line = true;
                             should_stop_cycle_loop = true;
                         }
-                    }
+                    },
+                    Err(TryRecvError::Disconnected) => should_stop_cycle_loop = true,
+                    _ => {} // We do not care about other types of errors.
                 }
 
-                // Delete old line.
+                // Continue with the animation.
+                // 1. Delete current line.
                 queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
                 queue!(stdout, cursor::MoveToColumn(0)).unwrap();
 
-                // Check if we need to print an emoji or the current frame.
-                if cmd_flags != 0 {
-                    let emoji_to_write = match cmd_flags {
-                        0b0001 => SUCCESS_SYMBOL,
-                        0b0010 => ERROR_SYMBOL,
-                        0b0100 => INFO_SYMBOL,
-                        0b1000 => WARNING_SYMBOL,
-                        0b10000 => UNKNOWN_SYMBOL,
-                        _ => unreachable!(),
-                    };
-                    writeln!(stdout, "{}{} {}", self.prefix, emoji_to_write, self.text).unwrap();
-                    should_stop_cycle_loop = true;
-                } else {
-                    write!(stdout, "{}{}{}", self.prefix, frame, self.text).unwrap();
+                // 2. Check if we can early-stop.
+                if should_stop_cycle_loop {
+                    if !should_clear_line {
+                        if let Some(symbol) = symbol {
+                            writeln!(stdout, "{}{} {}", self.prefix, symbol, self.text).unwrap();
+                        }
+                    }
+
+                    stdout.flush().unwrap();
+                    break; // Breaks out of the animation loop
                 }
 
-                // Flush output.
+                // 3. Print the new line.
+                write!(stdout, "{}{}{}", self.prefix, frame, self.text).unwrap();
                 stdout.flush().unwrap();
 
-                if should_stop_cycle_loop {
-                    if should_clear_line {
-                        queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-                        queue!(stdout, cursor::MoveToColumn(0)).unwrap();
-                        stdout.flush().unwrap();
-                    }
-                    break;
-                }
-
-                // Wait for the animation interval.
+                // 4. Wait for the animation interval.
                 std::thread::sleep(Duration::from_millis(self.data.interval));
             }
         });
+
         SpinnerHandle { handle, tx }
     }
 }
@@ -196,25 +183,31 @@ pub struct SpinnerHandle {
 impl SpinnerHandle {
     /// Stops the spinner and renders a success symbol.
     pub fn done(self) {
-        self.tx.send(SpinnerCommand::Done).unwrap();
-        self.stop();
+        self.tx
+            .send(SpinnerCommand::Stop(Some(StopType::Done)))
+            .unwrap();
+        self.handle.join().unwrap();
     }
 
     /// Stops the spinner and renders an error symbol.
     pub fn error(self) {
-        self.tx.send(SpinnerCommand::Error).unwrap();
-        self.stop();
+        self.tx
+            .send(SpinnerCommand::Stop(Some(StopType::Error)))
+            .unwrap();
+        self.handle.join().unwrap();
     }
 
     /// Stops the spinner and renders an information symbol.
     pub fn info(self) {
-        self.tx.send(SpinnerCommand::Info).unwrap();
-        self.stop();
+        self.tx
+            .send(SpinnerCommand::Stop(Some(StopType::Info)))
+            .unwrap();
+        self.handle.join().unwrap();
     }
 
     /// Stops the spinner.
     pub fn stop(self) {
-        self.tx.send(SpinnerCommand::Stop).unwrap();
+        self.tx.send(SpinnerCommand::Stop(None)).unwrap();
         self.handle.join().unwrap();
     }
 
@@ -233,13 +226,17 @@ impl SpinnerHandle {
 
     /// Stops the spinner and renders a warning symbol.
     pub fn warn(self) {
-        self.tx.send(SpinnerCommand::Warn).unwrap();
-        self.stop();
+        self.tx
+            .send(SpinnerCommand::Stop(Some(StopType::Warn)))
+            .unwrap();
+        self.handle.join().unwrap();
     }
 
     /// Stops the spinner and renders an unknown symbol.
     pub fn unknown(self) {
-        self.tx.send(SpinnerCommand::Unknown).unwrap();
-        self.stop()
+        self.tx
+            .send(SpinnerCommand::Stop(Some(StopType::Warn)))
+            .unwrap();
+        self.handle.join().unwrap();
     }
 }
