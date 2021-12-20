@@ -11,6 +11,8 @@ use terminal_log_symbols::colored::{
 };
 pub use terminal_spinner_data::*;
 
+type Str = Cow<'static, str>;
+
 // Commands send through the mpsc channels to notify the render thread of certain events.
 enum SpinnerCommand {
     ChangeText(Cow<'static, str>),
@@ -28,7 +30,8 @@ enum SpinnerCommand {
 // Holds all the data needed to actually render the spinner on a render thread.
 struct Spinner {
     data: &'static SpinnerData<'static>,
-    text: Cow<'static, str>,
+    text: Str,
+    prefix: Str,
     rx: Receiver<SpinnerCommand>,
 }
 
@@ -36,7 +39,8 @@ struct Spinner {
 #[derive(Clone, Default)]
 pub struct SpinnerBuilder {
     spinner_data: Option<&'static SpinnerData<'static>>,
-    text: Option<Cow<'static, str>>,
+    text: Option<Str>,
+    prefix: Option<Str>,
 }
 
 impl<'a> SpinnerBuilder {
@@ -57,6 +61,16 @@ impl<'a> SpinnerBuilder {
         self
     }
 
+    /// The prefix to print before the actual spinning animation.
+    ///
+    /// # Note
+    ///
+    /// The prefix must not include newlines, as the library deletion does not account for those.
+    pub fn prefix(mut self, prefix: impl Into<Cow<'static, str>>) -> Self {
+        self.prefix = Some(prefix.into());
+        self
+    }
+
     /// Starts the spinner and renders it on a separate thread.
     ///
     /// # Returns
@@ -74,6 +88,7 @@ impl<'a> SpinnerBuilder {
         let spinner = Spinner {
             data: self.spinner_data.unwrap(),
             text: self.text.unwrap(),
+            prefix: self.prefix.unwrap_or(Cow::Borrowed("")),
             rx,
         };
         spinner.start(tx)
@@ -144,10 +159,10 @@ impl Spinner {
                         0b10000 => UNKNOWN_SYMBOL,
                         _ => unreachable!(),
                     };
-                    writeln!(stdout, "{} {}", emoji_to_write, self.text).unwrap();
+                    writeln!(stdout, "{}{} {}", self.prefix, emoji_to_write, self.text).unwrap();
                     should_stop_cycle_loop = true;
                 } else {
-                    write!(stdout, "{}{}", frame, self.text).unwrap();
+                    write!(stdout, "{}{}{}", self.prefix, frame, self.text).unwrap();
                 }
 
                 // Flush output.
