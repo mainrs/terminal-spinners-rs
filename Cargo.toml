@@ -2,9 +2,9 @@
 name = "terminal-spinners"
 description = "A library for showing terminal loading animations"
 license = "Apache-2.0 OR MIT"
-repository = "https://github.com/SirWindfield/terminal-spinners-rs"
+repository = "https://github.com/mainrs/terminal-spinners-rs"
 version = "0.3.1"
-authors = ["SirWindfield <SirWindfield@users.noreply.github.com>"]
+authors = ["mainrs <5113257+mainrs@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
