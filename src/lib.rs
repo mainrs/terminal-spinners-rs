@@ -88,7 +88,7 @@ impl<'a> SpinnerBuilder {
         let spinner = Spinner {
             data: self.spinner_data.unwrap(),
             text: self.text.unwrap(),
-            prefix: self.prefix.unwrap_or_else(|| Cow::Borrowed("")),
+            prefix: self.prefix.unwrap_or(Cow::Borrowed("")),
             rx,
         };
         spinner.start(tx)
