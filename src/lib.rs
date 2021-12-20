@@ -235,7 +235,7 @@ impl SpinnerHandle {
     /// Stops the spinner and renders an unknown symbol.
     pub fn unknown(self) {
         self.tx
-            .send(SpinnerCommand::Stop(Some(StopType::Warn)))
+            .send(SpinnerCommand::Stop(Some(StopType::Unknown)))
             .unwrap();
         self.handle.join().unwrap();
     }
