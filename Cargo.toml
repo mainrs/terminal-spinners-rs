@@ -8,6 +8,6 @@ authors = ["mainrs <5113257+mainrs@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
-crossterm = "0.22.1"
+crossterm = "0.26.0"
 terminal-log-symbols = "0.1.6"
 terminal-spinner-data = "0.1.1"
